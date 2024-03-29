@@ -61,13 +61,6 @@ const (
 // has to be defined as a non-constant because we're using path.Join
 var internalConfigPath = path.Join(".", logDirectory)
 
-var defaultSliderMapping = func() *sliderMap {
-	emptyMap := newSliderMap()
-	emptyMap.set(0, []string{masterSessionName})
-
-	return emptyMap
-}()
-
 // NewConfig creates a config instance for the deej object and sets up viper instances for deej's config files
 func NewConfig(logger *zap.SugaredLogger, notifier Notifier) (*CanonicalConfig, error) {
 	logger = logger.Named("config")

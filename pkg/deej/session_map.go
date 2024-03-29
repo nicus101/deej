@@ -126,12 +126,9 @@ func (m *sessionMap) setupOnConfigReload() {
 	configReloadedChannel := m.deej.config.SubscribeToChanges()
 
 	go func() {
-		for {
-			select {
-			case <-configReloadedChannel:
-				m.logger.Info("Detected config reload, attempting to re-acquire all audio sessions")
-				m.refreshSessions(false)
-			}
+		for range configReloadedChannel {
+			m.logger.Info("Detected config reload, attempting to re-acquire all audio sessions")
+			m.refreshSessions(false)
 		}
 	}()
 }
@@ -140,11 +137,9 @@ func (m *sessionMap) setupOnSliderMove() {
 	sliderEventsChannel := m.deej.serial.SubscribeToSliderMoveEvents()
 
 	go func() {
-		for {
-			select {
-			case event := <-sliderEventsChannel:
-				m.handleSliderMoveEvent(event)
-			}
+		for range sliderEventsChannel {
+			event := <-sliderEventsChannel
+			m.handleSliderMoveEvent(event)
 		}
 	}()
 }
