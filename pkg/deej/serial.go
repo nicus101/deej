@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"regexp"
 	"strconv"
 	"strings"
@@ -18,9 +19,6 @@ import (
 
 // SerialIO provides a deej-aware abstraction layer to managing serial I/O
 type SerialIO struct {
-	comPort  string
-	baudRate uint
-
 	deej   *Deej
 	logger *zap.SugaredLogger
 
@@ -33,6 +31,10 @@ type SerialIO struct {
 	currentSliderPercentValues []float32
 
 	sliderMoveConsumers []chan SliderMoveEvent
+
+	muteConsumer interface {
+		Mute([]bool)
+	}
 }
 
 // SliderMoveEvent represents a single slider move captured by deej
@@ -152,35 +154,32 @@ func (sio *SerialIO) setupOnConfigReload() {
 	const stopDelay = 50 * time.Millisecond
 
 	go func() {
-		for {
-			select {
-			case <-configReloadedChannel:
+		for range configReloadedChannel {
 
-				// make any config reload unset our slider number to ensure process volumes are being re-set
-				// (the next read line will emit SliderMoveEvent instances for all sliders)\
-				// this needs to happen after a small delay, because the session map will also re-acquire sessions
-				// whenever the config file is reloaded, and we don't want it to receive these move events while the map
-				// is still cleared. this is kind of ugly, but shouldn't cause any issues
-				go func() {
-					<-time.After(stopDelay)
-					sio.lastKnownNumSliders = 0
-				}()
+			// make any config reload unset our slider number to ensure process volumes are being re-set
+			// (the next read line will emit SliderMoveEvent instances for all sliders)\
+			// this needs to happen after a small delay, because the session map will also re-acquire sessions
+			// whenever the config file is reloaded, and we don't want it to receive these move events while the map
+			// is still cleared. this is kind of ugly, but shouldn't cause any issues
+			go func() {
+				<-time.After(stopDelay)
+				sio.lastKnownNumSliders = 0
+			}()
 
-				// if connection params have changed, attempt to stop and start the connection
-				if sio.deej.config.ConnectionInfo.COMPort != sio.connOptions.PortName ||
-					uint(sio.deej.config.ConnectionInfo.BaudRate) != sio.connOptions.BaudRate {
+			// if connection params have changed, attempt to stop and start the connection
+			if sio.deej.config.ConnectionInfo.COMPort != sio.connOptions.PortName ||
+				uint(sio.deej.config.ConnectionInfo.BaudRate) != sio.connOptions.BaudRate {
 
-					sio.logger.Info("Detected change in connection parameters, attempting to renew connection")
-					sio.Stop()
+				sio.logger.Info("Detected change in connection parameters, attempting to renew connection")
+				sio.Stop()
 
-					// let the connection close
-					<-time.After(stopDelay)
+				// let the connection close
+				<-time.After(stopDelay)
 
-					if err := sio.Start(); err != nil {
-						sio.logger.Warnw("Failed to renew connection after parameter change", "error", err)
-					} else {
-						sio.logger.Debug("Renewed connection successfully")
-					}
+				if err := sio.Start(); err != nil {
+					sio.logger.Warnw("Failed to renew connection after parameter change", "error", err)
+				} else {
+					sio.logger.Debug("Renewed connection successfully")
 				}
 			}
 		}
@@ -226,16 +225,42 @@ func (sio *SerialIO) readLine(logger *zap.SugaredLogger, reader *bufio.Reader) c
 	return ch
 }
 
+// Handle the mute line - split and convert to bool slice, propagate to consumer.
+func (sio *SerialIO) handleMute(line string) {
+	splitLine := strings.Split(line, "|")
+	output := make([]bool, len(splitLine))
+
+	for i, v := range splitLine {
+		if v == "0" {
+			output[i] = false
+			continue
+		}
+		if v == "1" {
+			output[i] = true
+			continue
+		}
+
+		log.Printf("value %q at position %d is not a bool", v, i)
+	}
+
+	if sio.muteConsumer != nil {
+		sio.muteConsumer.Mute(output)
+	}
+}
+
 func (sio *SerialIO) handleLine(logger *zap.SugaredLogger, line string) {
 
 	// this function receives an unsanitized line which is guaranteed to end with LF,
 	// but most lines will end with CRLF. it may also have garbage instead of
 	// deej-formatted values, so we must check for that! just ignore bad ones
 	if !expectedLinePattern.MatchString(line) {
-		// TODO: add button handling
-		//if strings.HasPrefix("but|") {
-		//	handleButtonsLine(...)
-		//}
+		if !strings.HasPrefix(line, "but|") {
+			return
+		}
+		if !strings.HasSuffix(line, "\r\n") {
+			return
+		}
+		sio.handleMute(line[4 : len(line)-2])
 		return
 	}
 
