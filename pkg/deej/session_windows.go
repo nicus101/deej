@@ -152,7 +152,6 @@ func (s *wcaSession) SetVolume(v float32) error {
 	return nil
 }
 
-// zrób SetMute(newSTate bool) error - na modłe jak setVolume
 func (s *wcaSession) SetMute(m bool) error {
 	s.Lock()
 	defer s.Unlock()
