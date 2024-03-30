@@ -322,7 +322,6 @@ func (m *sessionMap) targetHasSpecialTransform(target string) bool {
 }
 
 func (m *sessionMap) resolveTarget(target string) []string {
-	// TODO: why deej.mic is not resolved?
 
 	// start by ignoring the case
 	target = strings.ToLower(target)
