@@ -365,6 +365,9 @@ func (m *sessionMap) applyTargetTransform(specialTargetName string) []string {
 		}
 
 		return targetKeys
+
+	case inputSessionName:
+		return []string{inputSessionName}
 	}
 
 	return nil
