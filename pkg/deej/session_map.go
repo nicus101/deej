@@ -81,6 +81,7 @@ func (m *sessionMap) initialize() error {
 
 	m.setupOnConfigReload()
 	m.setupOnSliderMove()
+	m.setupOnMute()
 
 	return nil
 }
@@ -137,11 +138,14 @@ func (m *sessionMap) setupOnSliderMove() {
 	sliderEventsChannel := m.deej.serial.SubscribeToSliderMoveEvents()
 
 	go func() {
-		for range sliderEventsChannel {
-			event := <-sliderEventsChannel
+		for event := range sliderEventsChannel {
 			m.handleSliderMoveEvent(event)
 		}
 	}()
+}
+
+func (m *sessionMap) setupOnMute() {
+	m.deej.serial.muteConsumer = m
 }
 
 // performance: explain why force == true at every such use to avoid unintended forced refresh spams
@@ -199,6 +203,53 @@ func (m *sessionMap) sessionMapped(session Session) bool {
 	})
 
 	return matchFound
+}
+
+func (m *sessionMap) Mute(mutes []bool) {
+	// for each mute input
+	for i, mute := range mutes {
+
+		// find what targets are configured
+		targets, found := m.deej.config.MuteMapping.Get(i)
+		if !found {
+			continue
+		}
+
+		// for each target set it mute status
+		for _, target := range targets {
+			go m.handleMuteEvent(mute, target)
+		}
+	}
+}
+
+func (m *sessionMap) handleMuteEvent(mute bool, target string) {
+	// resolve the target name by cleaning it up and applying any special transformations.
+	// depending on the transformation applied, this can result in more than one target name
+	resolvedTargets := m.resolveTarget(target)
+
+	// for each resolved target...
+	for _, resolvedTarget := range resolvedTargets {
+
+		// check the map for matching sessions
+		sessions, ok := m.get(resolvedTarget)
+
+		// no sessions matching this target - move on
+		if !ok {
+			continue
+		}
+
+		//targetFound = true
+
+		// iterate all matching sessions and adjust the volume of each one
+		for _, session := range sessions {
+			//if session.GetVolume() != event.PercentValue {
+			if err := session.SetMute(mute); err != nil {
+				m.logger.Warnw("Failed to set target session mute", "error", err)
+				//		adjustmentFailed = true
+			}
+			//}
+		}
+	}
 }
 
 func (m *sessionMap) handleSliderMoveEvent(event SliderMoveEvent) {
@@ -313,6 +364,9 @@ func (m *sessionMap) applyTargetTransform(specialTargetName string) []string {
 		}
 
 		return targetKeys
+
+	case inputSessionName:
+		return []string{inputSessionName}
 	}
 
 	return nil

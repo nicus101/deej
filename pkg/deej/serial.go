@@ -254,7 +254,7 @@ func (sio *SerialIO) handleLine(logger *zap.SugaredLogger, line string) {
 	// but most lines will end with CRLF. it may also have garbage instead of
 	// deej-formatted values, so we must check for that! just ignore bad ones
 	if !expectedLinePattern.MatchString(line) {
-		if !strings.HasPrefix(line, "but|") {
+		if !strings.HasPrefix(line, "but|") && !strings.HasPrefix(line, "mute|") {
 			return
 		}
 		if !strings.HasSuffix(line, "\r\n") {
