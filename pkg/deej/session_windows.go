@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	ole "github.com/go-ole/go-ole"
 	ps "github.com/mitchellh/go-ps"
@@ -15,6 +16,8 @@ var errNoSuchProcess = errors.New("no such process")
 var errRefreshSessions = errors.New("trigger session refresh")
 
 type wcaSession struct {
+	sync.Mutex
+
 	baseSession
 
 	pid         uint32
@@ -24,9 +27,13 @@ type wcaSession struct {
 	volume  *wca.ISimpleAudioVolume
 
 	eventCtx *ole.GUID
+
+	isMuted bool
 }
 
 type masterSession struct {
+	sync.Mutex
+
 	baseSession
 
 	volume *wca.IAudioEndpointVolume
@@ -34,6 +41,8 @@ type masterSession struct {
 	eventCtx *ole.GUID
 
 	stale bool // when set to true, we should refresh sessions on the next call to SetVolume
+
+	isMuted bool
 }
 
 func newWCASession(
@@ -145,6 +154,13 @@ func (s *wcaSession) SetVolume(v float32) error {
 
 // zrób SetMute(newSTate bool) error - na modłe jak setVolume
 func (s *wcaSession) SetMute(m bool) error {
+	s.Lock()
+	defer s.Unlock()
+
+	if s.isMuted == m {
+		return nil
+	}
+
 	if err := s.volume.SetMute(m, s.eventCtx); err != nil {
 		s.logger.Warnw("Failed to set session mute", "error", err)
 		return fmt.Errorf("change session mute: %w", err)
@@ -164,6 +180,7 @@ func (s *wcaSession) SetMute(m bool) error {
 	}
 
 	s.logger.Debugw("Adjusting session mute", "to", m)
+	s.isMuted = m
 	return nil
 }
 
@@ -208,6 +225,13 @@ func (s *masterSession) SetVolume(v float32) error {
 }
 
 func (s *masterSession) SetMute(m bool) error {
+	s.Lock()
+	defer s.Unlock()
+
+	if s.isMuted == m {
+		return nil
+	}
+
 	if s.stale {
 		s.logger.Warnw("Session expired because default device has changed, triggering session refresh")
 		return errRefreshSessions
@@ -222,7 +246,7 @@ func (s *masterSession) SetMute(m bool) error {
 	}
 
 	s.logger.Debugw("Adjusting session mute", "to", m)
-
+	s.isMuted = m
 	return nil
 }
 

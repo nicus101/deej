@@ -244,7 +244,7 @@ func (m *sessionMap) handleMuteEvent(mute bool, target string) {
 		for _, session := range sessions {
 			//if session.GetVolume() != event.PercentValue {
 			if err := session.SetMute(mute); err != nil {
-				m.logger.Warnw("Failed to set target session volume", "error", err)
+				m.logger.Warnw("Failed to set target session mute", "error", err)
 				//		adjustmentFailed = true
 			}
 			//}
@@ -322,6 +322,7 @@ func (m *sessionMap) targetHasSpecialTransform(target string) bool {
 }
 
 func (m *sessionMap) resolveTarget(target string) []string {
+	// TODO: why deej.mic is not resolved?
 
 	// start by ignoring the case
 	target = strings.ToLower(target)
