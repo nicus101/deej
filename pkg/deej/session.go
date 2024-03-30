@@ -13,7 +13,7 @@ type Session interface {
 
 	// TODO: future mute support
 	// GetMute() bool
-	// SetMute(m bool) error
+	SetMute(m bool) error
 
 	Key() string
 	Release()

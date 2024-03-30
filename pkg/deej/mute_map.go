@@ -5,9 +5,9 @@ import "fmt"
 type MuteMap struct {
 }
 
-// Consume bool slice, made by serial.go, and propagate to correct consumers.
-func (muteMap *MuteMap) Mute(values []bool) {
+func (mm *MuteMap) Get(position int) ([]string, bool) {
 
+	return nil, false
 }
 
 // Load values from viper configuration, and make new instance of muteMap.

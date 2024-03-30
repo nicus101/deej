@@ -125,6 +125,20 @@ func (s *paSession) SetVolume(v float32) error {
 	return nil
 }
 
+func (s *paSession) SetMute(newState bool) error {
+	request := proto.SetSinkInputMute{
+		SinkInputIndex: s.sinkInputIndex,
+		Mute:           newState,
+	}
+
+	if err := s.client.Request(&request, nil); err != nil {
+		return fmt.Errorf("mutting session to %b: %w", newState, err)
+	}
+
+	s.logger.Debugf("Adjusting session mute to %b", newState)
+	return nil
+}
+
 func (s *paSession) Release() {
 	s.logger.Debug("Releasing audio session")
 }
