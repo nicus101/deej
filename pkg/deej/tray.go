@@ -1,10 +1,12 @@
 package deej
 
 import (
+	"log"
+
 	"github.com/getlantern/systray"
 
 	"github.com/omriharel/deej/pkg/deej/icon"
-	"github.com/omriharel/deej/pkg/deej/util"
+	"github.com/omriharel/deej/pkg/deej/ui"
 )
 
 func (d *Deej) initializeTray(onDone func()) {
@@ -17,7 +19,7 @@ func (d *Deej) initializeTray(onDone func()) {
 		systray.SetTitle("deej")
 		systray.SetTooltip("deej")
 
-		editConfig := systray.AddMenuItem("Edit configuration", "Open config file with notepad")
+		editConfig := systray.AddMenuItem("Edit configuration with GUI", "Open config window")
 		editConfig.SetIcon(icon.EditConfig)
 
 		refreshSessions := systray.AddMenuItem("Re-scan audio sessions", "Manually refresh audio sessions if something's stuck")
@@ -47,14 +49,24 @@ func (d *Deej) initializeTray(onDone func()) {
 				case <-editConfig.ClickedCh:
 					logger.Info("Edit config menu item clicked, opening config for editing")
 
-					editor := "notepad.exe"
-					if util.Linux() {
-						editor = "gedit"
+					sessions, err := d.sessions.GetAllSessions()
+					if err != nil {
+						log.Fatal(err)
 					}
 
-					if err := util.OpenExternal(logger, editor, userConfigFilepath); err != nil {
-						logger.Warnw("Failed to open config file for editing", "error", err)
+					keys := make([]string, len(sessions))
+					for i, session := range sessions {
+						keys[i] = session.Key()
 					}
+					ui.ShowUI(keys)
+
+					// editor := "notepad.exe"
+					// if util.Linux() {
+					// 	editor = "gedit"
+					// }
+					// if err := util.OpenExternal(logger, editor, userConfigFilepath); err != nil {
+					// 	logger.Warnw("Failed to open config file for editing", "error", err)
+					// }
 
 				// refresh sessions
 				case <-refreshSessions.ClickedCh:

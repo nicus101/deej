@@ -24,7 +24,7 @@ type Deej struct {
 	notifier Notifier
 	config   *CanonicalConfig
 	serial   *SerialIO
-	sessions *sessionMap
+	sessions *SessionMap
 
 	stopChannel chan bool
 	version     string
