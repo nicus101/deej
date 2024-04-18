@@ -20,9 +20,9 @@ func makeAppSelectFunc(appList []string, comboBox *wui.ComboBox) func(int) {
 		}
 
 		selectedApps := make([]string, 0, len(appList))
-		for i := 0; i == len(appList); i++ {
-			if strings.HasPrefix(appList[i], selectedPrefix) {
-				selectedApps = append(selectedApps, appList[i])
+		for _, appName := range appList {
+			if strings.HasPrefix(appName, selectedPrefix) {
+				selectedApps = append(selectedApps, appName)
 			}
 		}
 
