@@ -58,7 +58,7 @@ func (d *Deej) initializeTray(onDone func()) {
 					for i, session := range sessions {
 						keys[i] = session.Key()
 					}
-					ui.ShowUI(keys)
+					ui.ShowUI(keys, nil)
 
 					// editor := "notepad.exe"
 					// if util.Linux() {

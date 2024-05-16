@@ -8,5 +8,5 @@ func main() {
 		"hujnik.exe",
 		"cycki.exe",
 		"= UwU =",
-	})
+	}, nil)
 }

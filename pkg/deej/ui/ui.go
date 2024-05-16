@@ -39,7 +39,11 @@ func makeAppSelectFunc(appList []string, comboBox *wui.ComboBox) func(int) {
 	}
 }
 
-func ShowUI(appList []string) {
+type DevicePortSetter interface {
+	DevicePortSet(deviceName string)
+}
+
+func ShowUI(appList []string, devicePortSetter DevicePortSetter) {
 	appList = append(appList, "deej.unmapped", "deej.current")
 
 	configWindowFont, _ := wui.NewFont(wui.FontDesc{
