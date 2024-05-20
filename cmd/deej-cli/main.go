@@ -6,7 +6,6 @@ import (
 	"strings"
 	"unsafe"
 
-	ps "github.com/mitchellh/go-ps"
 	"github.com/moutend/go-wca"
 	"github.com/omriharel/deej/pkg/session"
 )
@@ -202,86 +201,22 @@ func enumerateOrSomething(endpoint *wca.IMMDevice) (err error) {
 	log.Println("Got session count from session enumerator", "count", sessionCount)
 
 	// for each session:
-	for sessionIdx := 0; sessionIdx < sessionCount; sessionIdx++ {
-		err = scanSubSession(sessionEnumerator, sessionIdx)
-		if err != nil {
-			return fmt.Errorf("scanning failed: %w", err)
-		}
-	}
-	return nil
-}
-
-func scanSubSession(sessionEnumerator *wca.IAudioSessionEnumerator, sessionIdx int) (err error) {
-
-	// get the IAudioSessionControl
 	var audioSessionControl *wca.IAudioSessionControl
-	err = sessionEnumerator.GetSession(sessionIdx, &audioSessionControl)
-	if err != nil {
-		return fmt.Errorf("get session %d from enumerator: %w", sessionIdx, err)
-	}
+	for sessionIdx := 0; sessionIdx < sessionCount; sessionIdx++ {
 
-	// query its IAudioSessionControl2
-	dispatch, err := audioSessionControl.QueryInterface(wca.IID_IAudioSessionControl2)
-	if err != nil {
-		return fmt.Errorf("query session %d IAudioSessionControl2: %w", sessionIdx, err)
-	}
-	// we no longer need the IAudioSessionControl, release it
-	audioSessionControl.Release()
-	// receive a useful object instead of our dispatch
-	audioSessionControl2 := (*wca.IAudioSessionControl2)(unsafe.Pointer(dispatch))
-
-	var pid uint32
-	// get the session's PID
-	if err := audioSessionControl2.GetProcessId(&pid); err != nil {
-		// if this is the system sounds session, GetProcessId will error with an undocumented
-		// AUDCLNT_S_NO_CURRENT_PROCESS (0x889000D) - this is fine, we actually want to treat it a bit differently
-		// The first part of this condition will be true if the call to IsSystemSoundsSession fails
-		// The second part will be true if the original error mesage from GetProcessId doesn't contain this magical
-		// error code (in decimal format).
-		isSystemSoundsErr := audioSessionControl2.IsSystemSoundsSession()
-		if isSystemSoundsErr != nil && !strings.Contains(err.Error(), "143196173") {
-			return fmt.Errorf("query session %d pid: %w", sessionIdx, err)
+		err = sessionEnumerator.GetSession(sessionIdx, &audioSessionControl)
+		if err != nil {
+			return fmt.Errorf("get session %d from enumerator: %w", sessionIdx, err)
 		}
-		// update 2020/08/31: this is also the exact case for UWP applications, so we should no longer override the PID.
-		// it will successfully update whenever we call GetProcessId for e.g. Video.UI.exe, despite the error being non-nil.
+
+		channel, err := session.MakeChannel(audioSessionControl, nil)
+		audioSessionControl.Release()
+		if err != nil {
+			return fmt.Errorf("%d: %w", sessionIdx, err)
+		}
+
+		log.Printf("Found session %q", channel.Executable())
+		channel.Release()
 	}
-
-	// get its ISimpleAudioVolume
-	dispatch, err = audioSessionControl2.QueryInterface(wca.IID_ISimpleAudioVolume)
-	if err != nil {
-		return fmt.Errorf("query session %d ISimpleAudioVolume: %w", sessionIdx, err)
-	}
-	// make it useful, again
-	simpleAudioVolume := (*wca.ISimpleAudioVolume)(unsafe.Pointer(dispatch))
-
-	process, err := ps.FindProcess(int(pid))
-	if err != nil {
-		return fmt.Errorf("find process name by pid: %w", err)
-	}
-	log.Println("Found something", pid, process.Executable())
-	simpleAudioVolume.Release()
-
-	// create the deej session object
-
-	//newSession, err := deej. newWCASession(sf.sessionLogger, audioSessionControl2, simpleAudioVolume, pid, sf.eventCtx)
-	// 	if err != nil {
-
-	// 		// this could just mean this process is already closed by now, and the session will be cleaned up later by the OS
-	// 		if !errors.Is(err, errNoSuchProcess) {
-	// 			sf.logger.Warnw("Failed to create new WCA session instance",
-	// 				"error", err,
-	// 				"sessionIdx", sessionIdx)
-
-	// 			return fmt.Errorf("create wca session for session %d: %w", sessionIdx, err)
-	// 		}
-
-	// 		// in this case, log it and release the session's handles, then skip to the next one
-	// 		sf.logger.Debugw("Process already exited, skipping session and releasing handles", "pid", pid)
-
-	// 		audioSessionControl2.Release()
-	// 		simpleAudioVolume.Release()
-
-	// 		continue
-	// 	}
 	return nil
 }
