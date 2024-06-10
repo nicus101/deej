@@ -4,6 +4,7 @@ go 1.14
 
 require (
 	github.com/fsnotify/fsnotify v1.4.9
+	github.com/fstanis/screenresolution v0.0.0-20190527020317-869904d15333
 	github.com/gen2brain/beeep v0.0.0-20200420150314-13046a26d502
 	github.com/getlantern/systray v1.2.2
 	github.com/go-ole/go-ole v1.2.4

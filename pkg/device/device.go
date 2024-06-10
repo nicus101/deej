@@ -44,8 +44,12 @@ func OpenAndDispatch(ctx context.Context, portName string /*consumer VolumeConsu
 	}
 }
 
+func ListAllNames() ([]string, error) {
+	return serial.GetPortsList()
+}
+
 func ListNames() ([]string, error) {
-	portList, err := serial.GetPortsList()
+	portList, err := ListAllNames()
 
 	if err != nil {
 		return nil, fmt.Errorf("can't get port list: %w", err)
