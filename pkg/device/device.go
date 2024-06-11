@@ -3,6 +3,7 @@ package device
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -11,10 +12,78 @@ import (
 	"go.bug.st/serial"
 )
 
+var ErrConnectionTimeout = errors.New("line read timeouted")
+
+type Connection struct {
+	portNameChannel chan string
+}
+
 // type VolumeConsumer interface {
 // 	OnVolume([]int)
 // 	OnMute([]bool)
 // }
+
+// TODO connection busy
+func (ConnectAD *Connection) ConnectAndDispatch(ctx context.Context, portName string) error {
+	log.Println("Connecting to:", portName)
+
+	port, err := serial.Open(portName, &serial.Mode{
+		BaudRate: 9600,
+	})
+	if err != nil {
+		return err
+	}
+	defer port.Close()
+
+	if ConnectAD.portNameChannel == nil {
+		ConnectAD.portNameChannel = make(chan string, 1)
+	}
+
+	timerTimeout := time.Second * 5
+	timerHit := false
+	timer := time.AfterFunc(timerTimeout, func() {
+		timerHit = true
+		port.Close()
+	})
+
+	reader := bufio.NewReader(port)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+
+		case newPortName := <-ConnectAD.portNameChannel:
+			log.Println("Changing port to:", newPortName)
+			port.Close()
+			return ConnectAD.ConnectAndDispatch(ctx, newPortName)
+
+		default:
+			// intentionaly empty
+		}
+
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			if timerHit {
+				err = ErrConnectionTimeout
+			}
+			// maybe add ErrConnectionClose na wypadek "device unplugged"?
+			return err
+		}
+		timer.Reset(timerTimeout)
+
+		line = strings.TrimSuffix(line, "\r\n")
+		fmt.Printf("Read %q\n", line)
+	}
+}
+
+// zrób metodę na wskaźniku Connection o następującej geometri DevicePortSet(deviceName string)
+func (ConnectAD *Connection) DevicePortSet(deviceName string) {
+	if ConnectAD == nil {
+		return
+	}
+
+	ConnectAD.portNameChannel <- deviceName
+}
 
 func OpenAndDispatch(ctx context.Context, portName string /*consumer VolumeConsumer*/) error {
 	port, err := serial.Open(portName, &serial.Mode{
