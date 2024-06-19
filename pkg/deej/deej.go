@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 
 	"go.uber.org/zap"
 
@@ -113,6 +114,35 @@ func (d *Deej) Initialize() error {
 	}
 
 	return nil
+}
+
+// TODO: Nicek, opisz to po swojemu
+// Z punktu widzenia UI nie chcemy samych sesji, a listę nazw aplikacji/kanałów
+// raz że slica interfejsów nie przecastujemy, dwa że vipera i tak obchodzi tylko firefox.exe a nie sesja
+func (sf *Deej) ProgramList() ([]string, error) {
+	sf.sessions.refreshSessions(true)
+	programMap := map[string]struct{}{}
+
+	appendSessionKeys := func(sessions []Session) {
+		for _, session := range sessions {
+			programName := session.Key()
+			programMap[programName] = struct{}{}
+		}
+	}
+
+	appendSessionKeys(sf.sessions.unmappedSessions)
+
+	for _, sessions := range sf.sessions.m {
+		appendSessionKeys(sessions)
+	}
+
+	programList := make([]string, 0, len(programMap))
+	for programName := range programMap {
+		programList = append(programList, programName)
+	}
+
+	sort.Strings(programList)
+	return programList, nil
 }
 
 // SetVersion causes deej to add a version string to its tray menu if called before Initialize

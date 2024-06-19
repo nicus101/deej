@@ -11,8 +11,14 @@ import (
 	"github.com/omriharel/deej/pkg/device"
 )
 
-func makeAppSelectFunc(appList []string, comboBox *wui.ComboBox) func(int) {
-	selectedPrefix := "✔ "
+const selectedPrefix = "✔ "
+
+func makeAppSelectFunc(
+	chanId int,
+	channelAppsSetter ChannelAppsSetter,
+	appList []string,
+	comboBox *wui.ComboBox,
+) func(int) {
 	return func(i int) {
 		log.Printf("ComboBox %p selected %q\n", comboBox, appList[i])
 
@@ -46,7 +52,35 @@ type DevicePortSetter interface {
 	DevicePortSet(deviceName string)
 }
 
-func ShowUI(appList []string, devicePortSetter DevicePortSetter) {
+type ProgramLister interface {
+	ProgramList() ([]string, error)
+}
+
+type SettingsWriteCanceler interface {
+	// zapisuje aktualny konfig na dysk
+	Write() error
+
+	// kanceluje zmiany i wczytuje stare nastawy
+	Cancel() error
+}
+
+type ChannelAppsSetter interface {
+	ChannelAppsSet(chanId int, apps []string)
+	ChannelAppGet(chanId int) []string
+}
+
+func ShowUI(
+	_ []string,
+	devicePortSetter DevicePortSetter,
+	programLister ProgramLister,
+	settingsWriteCanceler SettingsWriteCanceler,
+	channelAppsSetter ChannelAppsSetter,
+) {
+	appList, err := programLister.ProgramList()
+	if err != nil {
+		log.Println("Cannot get program list:", err)
+	}
+
 	appList = append(appList, "deej.unmapped", "deej.current")
 
 	configWindowFont, _ := wui.NewFont(wui.FontDesc{
@@ -61,7 +95,7 @@ func ShowUI(appList []string, devicePortSetter DevicePortSetter) {
 
 	configWindow.SetFont(configWindowFont)
 	configWindow.SetInnerY(46)
-	configWindow.SetInnerSize(315, 317)
+	configWindow.SetInnerSize(315, 340)
 	configWindow.SetTitle("Mixer Deck Configurator")
 	configWindow.SetHasMaxButton(false)
 	configWindow.SetResizable(false)
@@ -87,7 +121,7 @@ func ShowUI(appList []string, devicePortSetter DevicePortSetter) {
 
 	panel4 := wui.NewPanel()
 	panel4.SetFont(panel4Font)
-	panel4.SetBounds(7, 61, 300, 216)
+	panel4.SetBounds(7, 61, 300, 246)
 	panel4.SetBorderStyle(wui.PanelBorderSingleLine)
 	configWindow.Add(panel4)
 
@@ -116,12 +150,11 @@ func ShowUI(appList []string, devicePortSetter DevicePortSetter) {
 	configWindow.Add(detectButton)
 
 	//================================================================ Start of pots combo boxes ================================================================
-	addComboBox(configWindow, 100, 65, appList)
-	addComboBox(configWindow, 100, 100, appList)
-	addComboBox(configWindow, 100, 135, appList)
-	addComboBox(configWindow, 100, 170, appList)
-	addComboBox(configWindow, 100, 205, appList)
-	addComboBox(configWindow, 100, 245, appList)
+	comboBoxes := make([]*wui.ComboBox, 6)
+	for i := 0; i < 6; i++ {
+		y := 72 + i*35
+		comboBoxes[i] = addComboBox(configWindow, i, 100, y, appList, channelAppsSetter)
+	}
 
 	//================================================================= Labels ============================================================================
 	addLabel(configWindow, 15, 70, 80, 24, "Volume 1:")
@@ -131,8 +164,15 @@ func ShowUI(appList []string, devicePortSetter DevicePortSetter) {
 	addLabel(configWindow, 15, 210, 80, 24, "Volume 5:")
 	addLabel(configWindow, 15, 245, 80, 24, "Volume 6:")
 
+	rescanBtn := wui.NewButton()
+	rescanBtn.SetBounds(185, 278, 100, 20)
+	rescanBtn.SetText("Rescan")
+	addLabel(configWindow, 25, 275, 150, 24, "Don't see your app on list HIT =>")
+
+	configWindow.Add(rescanBtn)
+
 	cancelBtn := wui.NewButton()
-	cancelBtn.SetBounds(7, 282, 85, 25)
+	cancelBtn.SetBounds(7, 310, 85, 25)
 	cancelBtn.SetText("Close")
 	cancelBtn.SetOnClick(func() {
 		configWindow.Close()
@@ -141,7 +181,7 @@ func ShowUI(appList []string, devicePortSetter DevicePortSetter) {
 
 	detectedDeviceName := ""
 	saveBtn := wui.NewButton()
-	saveBtn.SetBounds(222, 282, 85, 25)
+	saveBtn.SetBounds(222, 310, 85, 25)
 	saveBtn.SetText("Save")
 	saveBtn.SetOnClick(func() {
 		log.Print("Device ", detectedDeviceName)
@@ -159,7 +199,7 @@ func ShowUI(appList []string, devicePortSetter DevicePortSetter) {
 	isConnectedLabel := addLabel(configWindow, 207, 10, 90, 10, "Click detect port")
 
 	applyBtn := wui.NewButton()
-	applyBtn.SetBounds(114, 282, 85, 25)
+	applyBtn.SetBounds(114, 310, 85, 25)
 	applyBtn.SetText("Test")
 	applyBtn.SetOnClick(func() {
 		log.Print("Device ", detectedDeviceName)
@@ -173,6 +213,43 @@ func ShowUI(appList []string, devicePortSetter DevicePortSetter) {
 		devicePortSetter.DevicePortSet(detectedDeviceName)
 	})
 	configWindow.Add(applyBtn)
+
+	rescanBtn.SetOnClick(func() {
+		scannedApps, err := programLister.ProgramList()
+		if err != nil {
+			log.Println("Can't get apps list", err)
+			return
+		}
+		if len(scannedApps) == 0 {
+			log.Println("No apps detected.")
+			return
+		}
+
+		for chanId, comboBox := range comboBoxes {
+			items := comboBox.Items()
+			if len(items) > 0 {
+				selectedApps := channelAppsSetter.ChannelAppGet(chanId)
+				log.Print("selected apps:", selectedApps)
+
+				for i, scannedApp := range scannedApps {
+					for _, selectedApp := range selectedApps {
+						if scannedApp == selectedApp {
+							scannedApps[i] = selectedPrefix + scannedApp
+						}
+					}
+				}
+
+				items = append(
+					[]string{items[0]},
+					scannedApps...,
+				)
+			}
+			comboBox.SetItems(items)
+			comboBox.SetSelectedIndex(0)
+		}
+
+		configWindow.Repaint()
+	})
 
 	detectButton.SetOnClick(func() {
 		detectedDevices, err := device.ListNames()
@@ -212,19 +289,22 @@ func ShowUI(appList []string, devicePortSetter DevicePortSetter) {
 
 func addComboBox(
 	wnd *wui.Window,
-	x, y int,
+	i, x, y int,
 	appList []string,
-) {
+	channelAppsSetter ChannelAppsSetter,
+) *wui.ComboBox {
 	appList = append([]string{"= nothing ="}, appList...)
 	comboBox := wui.NewComboBox()
 	comboBox.SetBounds(x, y, 200, 24)
 	comboBox.SetItems(appList)
 	comboBox.SetSelectedIndex(0)
 	comboBox.SetOnChange(makeAppSelectFunc(
+		i, channelAppsSetter,
 		appList,
 		comboBox,
 	))
 	wnd.Add(comboBox)
+	return comboBox
 }
 
 func addLabel(

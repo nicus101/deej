@@ -3,14 +3,14 @@ package deej
 import (
 	"fmt"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/omriharel/deej/pkg/deej/util"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
-
-	"github.com/omriharel/deej/pkg/deej/util"
 )
 
 // CanonicalConfig provides application-wide access to configuration fields,
@@ -36,6 +36,18 @@ type CanonicalConfig struct {
 
 	userConfig     *viper.Viper
 	internalConfig *viper.Viper
+}
+
+func (cc *CanonicalConfig) Write() error {
+	return cc.userConfig.WriteConfig()
+}
+
+func (cc *CanonicalConfig) Cancel() error {
+	err := cc.userConfig.ReadInConfig()
+	if err == nil {
+		cc.onConfigReloaded()
+	}
+	return err
 }
 
 const (
@@ -213,6 +225,18 @@ func (cc *CanonicalConfig) WatchConfigFileChanges() {
 // StopWatchingConfigFile signals our filesystem watcher to stop
 func (cc *CanonicalConfig) StopWatchingConfigFile() {
 	cc.stopWatcherChannel <- true
+}
+
+func (cc *CanonicalConfig) ChannelAppGet(chanId int) []string {
+	chanStr := strconv.Itoa(chanId)
+	appMap := cc.userConfig.GetStringMapStringSlice(configKeySliderMapping)
+	appList := appMap[chanStr]
+	return appList
+}
+
+func (cc *CanonicalConfig) ChannelAppsSet(chanId int, apps []string) {
+	//chanStr := strconv.Itoa(chanId)
+
 }
 
 func (cc *CanonicalConfig) populateFromVipers() error {

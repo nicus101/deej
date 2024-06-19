@@ -1,8 +1,6 @@
 package deej
 
 import (
-	"log"
-
 	"github.com/getlantern/systray"
 
 	"github.com/omriharel/deej/pkg/deej/icon"
@@ -49,16 +47,16 @@ func (d *Deej) initializeTray(onDone func()) {
 				case <-editConfig.ClickedCh:
 					logger.Info("Edit config menu item clicked, opening config for editing")
 
-					sessions, err := d.sessions.GetAllSessions()
-					if err != nil {
-						log.Fatal(err)
-					}
+					// sessions, err := d.sessions.GetAllSessions()
+					// if err != nil {
+					// 	log.Fatal(err)
+					// }
 
-					keys := make([]string, len(sessions))
-					for i, session := range sessions {
-						keys[i] = session.Key()
-					}
-					ui.ShowUI(keys, nil)
+					// keys := make([]string, len(sessions))
+					// for i, session := range sessions {
+					// 	keys[i] = session.Key()
+					// }
+					ui.ShowUI(nil, nil, d, d.config, d.config)
 
 					// editor := "notepad.exe"
 					// if util.Linux() {
