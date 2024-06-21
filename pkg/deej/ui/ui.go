@@ -3,19 +3,87 @@ package ui
 import (
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 
 	"github.com/fstanis/screenresolution"
 	"github.com/gen2brain/beeep"
 	"github.com/gonutz/wui/v2"
 	"github.com/omriharel/deej/pkg/device"
+	"golang.org/x/exp/maps"
 )
+
+// TODO: make abstraction
+
+// type appComboEntry struct {
+// 	name string
+
+// 	// przechowywać infotmacje że aplikacja jest:
+// 	// - zaznaczona
+// 	// - zapisana
+// 	// - aktualnie nie uruchomiona
+// }
+
+// type appComboBox struct {
+// 	*wui.ComboBox
+
+// 	apps []appComboBox
+// }
 
 const selectedPrefix = "✔ "
 
+func setComboAppList(
+	comboBox *wui.ComboBox,
+	appList []string,
+	configuredApps []string,
+) {
+	log.Println(
+		"Refreshing appList:", strings.Join(appList, ", "),
+		"\n\tWith configured:", strings.Join(configuredApps, ", "),
+	)
+
+	// połączenie aktualnych aplikacji, razem z skonfigurowanymi aplikacjami
+	// bez powtórzeń, z priorytetem dla skonfigurowanych appek.
+	appMap := make(map[string]string, len(appList)+len(configuredApps))
+	for _, appName := range appList {
+		appMap[appName] = appName
+	}
+	for _, appName := range configuredApps {
+		appMap[appName] = selectedPrefix + appName
+	}
+	appKeys := maps.Keys(appMap)
+	sort.Strings(appKeys)
+
+	// we want virtual first entry that shows on combo box closed
+	// and inform user what apps are currently selected for
+	// controll channel coresponding with this combo box
+	var headerString string
+	switch l := len(configuredApps); {
+
+	case l == 0:
+		headerString = "= Nothing ="
+
+	case l < 4:
+		headerString = strings.Join(configuredApps, " & ")
+
+	default:
+		headerString = fmt.Sprintf("%d app selected", len(configuredApps))
+	}
+
+	// using deduplicated appKeys to make label listy, for user showing
+	items := make([]string, 0, len(appKeys)+1)
+	items = append(items, headerString)
+	for _, appKey := range appKeys {
+		items = append(items, appMap[appKey])
+	}
+
+	comboBox.SetItems(items)
+	comboBox.SetSelectedIndex(0)
+}
+
 func makeAppSelectFunc(
-	chanId int,
-	channelAppsSetter ChannelAppsSetter,
+	_ int,
+	_ ChannelAppsSetter,
 	appList []string,
 	comboBox *wui.ComboBox,
 ) func(int) {
@@ -226,26 +294,8 @@ func ShowUI(
 		}
 
 		for chanId, comboBox := range comboBoxes {
-			items := comboBox.Items()
-			if len(items) > 0 {
-				selectedApps := channelAppsSetter.ChannelAppGet(chanId)
-				log.Print("selected apps:", selectedApps)
-
-				for i, scannedApp := range scannedApps {
-					for _, selectedApp := range selectedApps {
-						if scannedApp == selectedApp {
-							scannedApps[i] = selectedPrefix + scannedApp
-						}
-					}
-				}
-
-				items = append(
-					[]string{items[0]},
-					scannedApps...,
-				)
-			}
-			comboBox.SetItems(items)
-			comboBox.SetSelectedIndex(0)
+			configuredApps := channelAppsSetter.ChannelAppGet(chanId)
+			setComboAppList(comboBox, scannedApps, configuredApps)
 		}
 
 		configWindow.Repaint()
