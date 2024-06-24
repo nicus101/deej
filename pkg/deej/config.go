@@ -2,6 +2,7 @@ package deej
 
 import (
 	"fmt"
+	"log"
 	"path"
 	"strconv"
 	"strings"
@@ -228,15 +229,34 @@ func (cc *CanonicalConfig) StopWatchingConfigFile() {
 }
 
 func (cc *CanonicalConfig) ChannelAppGet(chanId int) []string {
+	userConfig := viper.New()
+	userConfig.SetConfigName(userConfigName)
+	userConfig.SetConfigType(configType)
+	userConfig.AddConfigPath(userConfigPath)
+
+	userConfig.SetDefault(configKeySliderMapping, map[string][]string{})
+	userConfig.SetDefault(configKeyMuteMapping, map[string][]string{
+		"0": {"mic"},
+		"1": {"master"},
+	})
+	userConfig.SetDefault(configKeyInvertSliders, false)
+	userConfig.SetDefault(configKeyCOMPort, defaultCOMPort)
+	userConfig.SetDefault(configKeyBaudRate, defaultBaudRate)
+	userConfig.ReadInConfig()
+
 	chanStr := strconv.Itoa(chanId)
-	appMap := cc.userConfig.GetStringMapStringSlice(configKeySliderMapping)
+	appMap := userConfig.GetStringMapStringSlice(configKeySliderMapping)
 	appList := appMap[chanStr]
 	return appList
 }
 
 func (cc *CanonicalConfig) ChannelAppsSet(chanId int, apps []string) {
-	//chanStr := strconv.Itoa(chanId)
-
+	chanStr := strconv.Itoa(chanId)
+	sliderMapping := cc.userConfig.GetStringMapStringSlice(configKeySliderMapping)
+	sliderMapping[chanStr] = apps
+	cc.userConfig.Set(configKeySliderMapping, sliderMapping)
+	log.Println(chanStr, sliderMapping)
+	cc.populateFromVipers()
 }
 
 func (cc *CanonicalConfig) populateFromVipers() error {

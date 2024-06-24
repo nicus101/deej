@@ -1,120 +1,16 @@
 package ui
 
 import (
+	"bytes"
 	"fmt"
 	"log"
-	"sort"
-	"strings"
 
 	"github.com/fstanis/screenresolution"
 	"github.com/gen2brain/beeep"
 	"github.com/gonutz/wui/v2"
+	"github.com/omriharel/deej/pkg/deej/icon"
 	"github.com/omriharel/deej/pkg/device"
-	"golang.org/x/exp/maps"
 )
-
-// TODO: make abstraction
-
-// type appComboEntry struct {
-// 	name string
-
-// 	// przechowywać infotmacje że aplikacja jest:
-// 	// - zaznaczona
-// 	// - zapisana
-// 	// - aktualnie nie uruchomiona
-// }
-
-// type appComboBox struct {
-// 	*wui.ComboBox
-
-// 	apps []appComboBox
-// }
-
-const selectedPrefix = "✔ "
-
-func setComboAppList(
-	comboBox *wui.ComboBox,
-	appList []string,
-	configuredApps []string,
-) {
-	log.Println(
-		"Refreshing appList:", strings.Join(appList, ", "),
-		"\n\tWith configured:", strings.Join(configuredApps, ", "),
-	)
-
-	// połączenie aktualnych aplikacji, razem z skonfigurowanymi aplikacjami
-	// bez powtórzeń, z priorytetem dla skonfigurowanych appek.
-	appMap := make(map[string]string, len(appList)+len(configuredApps))
-	for _, appName := range appList {
-		appMap[appName] = appName
-	}
-	for _, appName := range configuredApps {
-		appMap[appName] = selectedPrefix + appName
-	}
-	appKeys := maps.Keys(appMap)
-	sort.Strings(appKeys)
-
-	// we want virtual first entry that shows on combo box closed
-	// and inform user what apps are currently selected for
-	// controll channel coresponding with this combo box
-	var headerString string
-	switch l := len(configuredApps); {
-
-	case l == 0:
-		headerString = "= Nothing ="
-
-	case l < 4:
-		headerString = strings.Join(configuredApps, " & ")
-
-	default:
-		headerString = fmt.Sprintf("%d app selected", len(configuredApps))
-	}
-
-	// using deduplicated appKeys to make label listy, for user showing
-	items := make([]string, 0, len(appKeys)+1)
-	items = append(items, headerString)
-	for _, appKey := range appKeys {
-		items = append(items, appMap[appKey])
-	}
-
-	comboBox.SetItems(items)
-	comboBox.SetSelectedIndex(0)
-}
-
-func makeAppSelectFunc(
-	_ int,
-	_ ChannelAppsSetter,
-	appList []string,
-	comboBox *wui.ComboBox,
-) func(int) {
-	return func(i int) {
-		log.Printf("ComboBox %p selected %q\n", comboBox, appList[i])
-
-		if strings.HasPrefix(appList[i], selectedPrefix) {
-			appList[i] = appList[i][len(selectedPrefix):]
-		} else {
-			appList[i] = selectedPrefix + appList[i]
-		}
-
-		selectedApps := make([]string, 0, len(appList))
-		for _, appName := range appList {
-			if strings.HasPrefix(appName, selectedPrefix) {
-				selectedApps = append(selectedApps, appName)
-			}
-		}
-
-		selectedLabel := "= nothing ="
-		if len(selectedApps) > 3 {
-			selectedLabel = fmt.Sprintf("%d app selected", len(selectedApps))
-		} else if len(selectedApps) > 0 {
-			selectedLabel = strings.Join(selectedApps, " & ")
-		}
-
-		appList[0] = selectedLabel
-		comboBox.SetItems(appList)
-		comboBox.SetSelectedIndex(0)
-	}
-}
 
 type DevicePortSetter interface {
 	DevicePortSet(deviceName string)
@@ -160,16 +56,15 @@ func ShowUI(
 
 	resolution := screenresolution.GetPrimary()
 	configWindow := wui.NewWindow()
+	mainIcon, _ := wui.NewIconFromReader(bytes.NewBuffer(icon.DeejLogo))
 
 	configWindow.SetFont(configWindowFont)
 	configWindow.SetInnerY(46)
 	configWindow.SetInnerSize(315, 340)
 	configWindow.SetTitle("Mixer Deck Configurator")
+	configWindow.SetIcon(mainIcon)
 	configWindow.SetHasMaxButton(false)
 	configWindow.SetResizable(false)
-	configWindow.SetOnCanClose(func() bool {
-		return askClose(configChanged)
-	})
 
 	panel3Font, _ := wui.NewFont(wui.FontDesc{
 		Name:   "Tahoma",
@@ -218,11 +113,16 @@ func ShowUI(
 	configWindow.Add(detectButton)
 
 	//================================================================ Start of pots combo boxes ================================================================
-	comboBoxes := make([]*wui.ComboBox, 6)
+	comboBoxes := make([]*appComboBox, 6)
 	for i := 0; i < 6; i++ {
 		y := 72 + i*35
-		comboBoxes[i] = addComboBox(configWindow, i, 100, y, appList, channelAppsSetter)
+		comboBoxes[i] = newComboBox(configWindow, 100, y, appList)
+		configuredApps := channelAppsSetter.ChannelAppGet(i)
+		comboBoxes[i].populateAppConfigStatus(configuredApps)
 	}
+	configWindow.SetOnCanClose(func() bool {
+		return askClose(configChanged, comboBoxes)
+	})
 
 	//================================================================= Labels ============================================================================
 	addLabel(configWindow, 15, 70, 80, 24, "Volume 1:")
@@ -253,13 +153,19 @@ func ShowUI(
 	saveBtn.SetText("Save")
 	saveBtn.SetOnClick(func() {
 		log.Print("Device ", detectedDeviceName)
-		if devicePortSetter == nil {
-			return
+		if devicePortSetter != nil && detectedDeviceName != "" {
+			devicePortSetter.DevicePortSet(detectedDeviceName)
 		}
-		if detectedDeviceName == "" {
-			return
+
+		if channelAppsSetter != nil {
+			for i, comboBox := range comboBoxes {
+				channelAppsSetter.ChannelAppsSet(i, comboBox.toSaveAppNames())
+			}
 		}
-		devicePortSetter.DevicePortSet(detectedDeviceName)
+
+		if settingsWriteCanceler != nil {
+			settingsWriteCanceler.Write()
+		}
 	})
 	configWindow.Add(saveBtn)
 
@@ -279,6 +185,10 @@ func ShowUI(
 		}
 		configChanged = true
 		devicePortSetter.DevicePortSet(detectedDeviceName)
+
+		for i, comboBox := range comboBoxes {
+			channelAppsSetter.ChannelAppsSet(i, comboBox.toSaveAppNames())
+		}
 	})
 	configWindow.Add(applyBtn)
 
@@ -294,8 +204,10 @@ func ShowUI(
 		}
 
 		for chanId, comboBox := range comboBoxes {
+			comboBox.populateAppList(scannedApps)
+
 			configuredApps := channelAppsSetter.ChannelAppGet(chanId)
-			setComboAppList(comboBox, scannedApps, configuredApps)
+			comboBox.populateAppConfigStatus(configuredApps)
 		}
 
 		configWindow.Repaint()
@@ -337,26 +249,6 @@ func ShowUI(
 	configWindow.Repaint()
 }
 
-func addComboBox(
-	wnd *wui.Window,
-	i, x, y int,
-	appList []string,
-	channelAppsSetter ChannelAppsSetter,
-) *wui.ComboBox {
-	appList = append([]string{"= nothing ="}, appList...)
-	comboBox := wui.NewComboBox()
-	comboBox.SetBounds(x, y, 200, 24)
-	comboBox.SetItems(appList)
-	comboBox.SetSelectedIndex(0)
-	comboBox.SetOnChange(makeAppSelectFunc(
-		i, channelAppsSetter,
-		appList,
-		comboBox,
-	))
-	wnd.Add(comboBox)
-	return comboBox
-}
-
 func addLabel(
 	wnd *wui.Window,
 	x, y, sx, sy int,
@@ -369,7 +261,12 @@ func addLabel(
 	return label
 }
 
-func askClose(configChanged bool) bool {
+func askClose(configChanged bool, comboBoxes []*appComboBox) bool {
+	for _, comboBox := range comboBoxes {
+		if comboBox.haveUserChanges() {
+			configChanged = true
+		}
+	}
 
 	if !configChanged {
 		return true
