@@ -19,7 +19,6 @@ type appComboStatus struct {
 type appComboBox struct {
 	*wui.ComboBox
 	appMap map[string]appComboStatus
-	chanId int
 }
 
 func newComboBox(
@@ -43,7 +42,7 @@ func newComboBox(
 func (cb *appComboBox) toSaveAppNames() []string {
 	appNames := make([]string, 0, len(cb.appMap))
 	for appName, appStatus := range cb.appMap {
-		if appStatus.isConfigured || appStatus.isSelected {
+		if appStatus.isConfigured != appStatus.isSelected {
 			appNames = append(appNames, appName)
 		}
 	}
@@ -59,11 +58,15 @@ func (cb *appComboBox) onChange(i int) {
 	if i >= len(appNames) {
 		return
 	}
+	appName := appNames[i]
+	appName = strings.TrimPrefix(appName, selectedPrefix)
+	// zrób appName z appNames po i
+	// pozbądź się tego ptaszka selectedPrefix z przodu
 
-	appStatus := cb.appMap[appNames[i]]
+	appStatus := cb.appMap[appName]
 	appStatus.isSelected = !appStatus.isSelected
 
-	cb.appMap[appNames[i]] = appStatus
+	cb.appMap[appName] = appStatus
 	cb.updateAppList()
 }
 
@@ -89,6 +92,7 @@ func (cb *appComboBox) populateAppList(appNames []string) {
 func (cb *appComboBox) populateAppConfigStatus(appNames []string) {
 	for _, appName := range appNames {
 		appStatus := cb.appMap[appName]
+		// TODO: to think about
 		appStatus.isConfigured = true
 		cb.appMap[appName] = appStatus
 	}

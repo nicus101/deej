@@ -23,7 +23,7 @@ func TestConnection_DevicePortSet(t *testing.T) {
 	}()
 
 	for {
-		err := connection.ConnectAndDispatch(ctx, "COM3")
+		err := connection.ConnectAndDispatch(ctx, "COM3", nil)
 		require.ErrorIs(t, err, ErrConnectionTimeout)
 	}
 }

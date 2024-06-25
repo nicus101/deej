@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"slices"
 
 	"github.com/fstanis/screenresolution"
 	"github.com/gen2brain/beeep"
@@ -99,10 +100,13 @@ func ShowUI(
 	comPortBox.SetItems(devices)
 	comPortBox.SetSelectedIndex(0)
 	comPortLastSelected := 0
+
+	detectedDeviceName := ""
 	comPortBox.SetOnChange(func(selectedPort int) {
 		if selectedPort != comPortLastSelected {
 			configChanged = true
 		}
+		detectedDeviceName = comPortBox.Items()[selectedPort]
 	})
 	configWindow.Add(comPortBox)
 
@@ -147,7 +151,6 @@ func ShowUI(
 	})
 	configWindow.Add(cancelBtn)
 
-	detectedDeviceName := ""
 	saveBtn := wui.NewButton()
 	saveBtn.SetBounds(222, 310, 85, 25)
 	saveBtn.SetText("Save")
@@ -165,6 +168,11 @@ func ShowUI(
 
 		if settingsWriteCanceler != nil {
 			settingsWriteCanceler.Write()
+		}
+		configChanged = false
+		for i, comboBox := range comboBoxes {
+			configuredApps := channelAppsSetter.ChannelAppGet(i)
+			comboBox.populateAppConfigStatus(configuredApps)
 		}
 	})
 	configWindow.Add(saveBtn)
@@ -229,8 +237,9 @@ func ShowUI(
 			if err != nil {
 				log.Println("Error", err)
 			}
-			return
+			//return
 		}
+		detectedDevices = slices.Compact(detectedDevices)
 		comPortBox.SetItems(detectedDevices)
 		comPortBox.SetSelectedIndex(0)
 		isConnectedLabel.SetText("Detected port:")

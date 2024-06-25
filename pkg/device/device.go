@@ -14,17 +14,23 @@ import (
 
 var ErrConnectionTimeout = errors.New("line read timeouted")
 
+var lastPortName string
+
 type Connection struct {
 	portNameChannel chan string
 }
 
-// type VolumeConsumer interface {
-// 	OnVolume([]int)
-// 	OnMute([]bool)
-// }
+type VolumeConsumer interface {
+	OnVolume([]int)
+	OnMute([]bool)
+}
 
 // TODO connection busy
-func (ConnectAD *Connection) ConnectAndDispatch(ctx context.Context, portName string) error {
+func (ConnectAD *Connection) ConnectAndDispatch(
+	ctx context.Context,
+	portName string,
+	volumeConsumer VolumeConsumer,
+) error {
 	log.Println("Connecting to:", portName)
 
 	port, err := serial.Open(portName, &serial.Mode{
@@ -38,6 +44,7 @@ func (ConnectAD *Connection) ConnectAndDispatch(ctx context.Context, portName st
 	if ConnectAD.portNameChannel == nil {
 		ConnectAD.portNameChannel = make(chan string, 1)
 	}
+	lastPortName = portName
 
 	timerTimeout := time.Second * 5
 	timerHit := false
@@ -55,7 +62,7 @@ func (ConnectAD *Connection) ConnectAndDispatch(ctx context.Context, portName st
 		case newPortName := <-ConnectAD.portNameChannel:
 			log.Println("Changing port to:", newPortName)
 			port.Close()
-			return ConnectAD.ConnectAndDispatch(ctx, newPortName)
+			return ConnectAD.ConnectAndDispatch(ctx, newPortName, volumeConsumer)
 
 		default:
 			// intentionaly empty
@@ -73,6 +80,7 @@ func (ConnectAD *Connection) ConnectAndDispatch(ctx context.Context, portName st
 
 		line = strings.TrimSuffix(line, "\r\n")
 		fmt.Printf("Read %q\n", line)
+		parseAndDispatch(line, volumeConsumer)
 	}
 }
 
@@ -125,6 +133,10 @@ func ListNames() ([]string, error) {
 	}
 
 	var deviceFound []string
+	if deviceName := lastPortName; deviceName != "" {
+		deviceFound = append(deviceFound, deviceName)
+	}
+
 	for _, portName := range portList {
 		log.Println("Detecting device on:", portName)
 

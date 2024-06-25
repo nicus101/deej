@@ -226,6 +226,10 @@ func (m *SessionMap) Mute(mutes []bool) {
 	}
 }
 
+func (m *SessionMap) OnMute(mutes []bool) {
+	m.Mute(mutes)
+}
+
 func (m *SessionMap) handleMuteEvent(mute bool, target string) {
 	// resolve the target name by cleaning it up and applying any special transformations.
 	// depending on the transformation applied, this can result in more than one target name
@@ -253,6 +257,16 @@ func (m *SessionMap) handleMuteEvent(mute bool, target string) {
 			}
 			//}
 		}
+	}
+}
+
+func (m *SessionMap) OnVolume(volumes []int) {
+	for i, volume := range volumes {
+		percent := float32(volume) / 1024
+		m.handleSliderMoveEvent(SliderMoveEvent{
+			SliderID:     i,
+			PercentValue: percent,
+		})
 	}
 }
 

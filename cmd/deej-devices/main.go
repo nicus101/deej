@@ -23,7 +23,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	err := device.TryReconnect(ctx, portName)
+	connection := &device.Connection{}
+
+	err := connection.ConnectAndDispatch(ctx, portName, fakeMikser{})
 	if err != nil {
 		log.Fatalln("Cannot open device: ", err)
 	}

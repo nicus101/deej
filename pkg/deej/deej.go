@@ -3,14 +3,16 @@
 package deej
 
 import (
-	"errors"
+	"context"
 	"fmt"
+	"log"
 	"os"
 	"sort"
 
 	"go.uber.org/zap"
 
 	"github.com/omriharel/deej/pkg/deej/util"
+	"github.com/omriharel/deej/pkg/device"
 )
 
 const (
@@ -30,6 +32,8 @@ type Deej struct {
 	stopChannel chan bool
 	version     string
 	verbose     bool
+
+	connection *device.Connection
 }
 
 // NewDeej creates a Deej instance
@@ -54,6 +58,7 @@ func NewDeej(logger *zap.SugaredLogger, verbose bool) (*Deej, error) {
 		config:      config,
 		stopChannel: make(chan bool),
 		verbose:     verbose,
+		connection:  &device.Connection{},
 	}
 
 	serial, err := NewSerialIO(d, logger)
@@ -165,6 +170,12 @@ func (d *Deej) setupInterruptHandler() {
 	}()
 }
 
+func (d *Deej) DevicePortSet(deviceName string) {
+	d.connection.DevicePortSet(deviceName)
+	fmt.Println("\033[31;1;4mUwU\033[0m")
+	d.config.userConfig.Set(configKeyCOMPort, deviceName)
+}
+
 func (d *Deej) run() {
 	d.logger.Info("Run loop starting")
 
@@ -173,30 +184,35 @@ func (d *Deej) run() {
 
 	// connect to the arduino for the first time
 	go func() {
-		if err := d.serial.Start(); err != nil {
-			d.logger.Warnw("Failed to start first-time serial connection", "error", err)
-
-			// If the port is busy, that's because something else is connected - notify and quit
-			if errors.Is(err, os.ErrPermission) {
-				d.logger.Warnw("Serial port seems busy, notifying user and closing",
-					"comPort", d.config.ConnectionInfo.COMPort)
-
-				d.notifier.Notify(fmt.Sprintf("Can't connect to %s!", d.config.ConnectionInfo.COMPort),
-					"This serial port is busy, make sure to close any serial monitor or other deej instance.")
-
-				d.signalStop()
-
-				// also notify if the COM port they gave isn't found, maybe their config is wrong
-			} else if errors.Is(err, os.ErrNotExist) {
-				d.logger.Warnw("Provided COM port seems wrong, notifying user and closing",
-					"comPort", d.config.ConnectionInfo.COMPort)
-
-				d.notifier.Notify(fmt.Sprintf("Can't connect to %s!", d.config.ConnectionInfo.COMPort),
-					"This serial port doesn't exist, check your configuration and make sure it's set correctly.")
-
-				d.signalStop()
-			}
+		comPort := d.config.ConnectionInfo.COMPort
+		err := d.connection.ConnectAndDispatch(context.TODO(), comPort, d.sessions) // TODO: make
+		if err != nil {
+			log.Fatal("connection failed:", err)
 		}
+		// if err := d.serial.Start(); err != nil {
+		// 	d.logger.Warnw("Failed to start first-time serial connection", "error", err)
+
+		// 	// If the port is busy, that's because something else is connected - notify and quit
+		// 	if errors.Is(err, os.ErrPermission) {
+		// 		d.logger.Warnw("Serial port seems busy, notifying user and closing",
+		// 			"comPort", d.config.ConnectionInfo.COMPort)
+
+		// 		d.notifier.Notify(fmt.Sprintf("Can't connect to %s!", d.config.ConnectionInfo.COMPort),
+		// 			"This serial port is busy, make sure to close any serial monitor or other deej instance.")
+
+		// 		d.signalStop()
+
+		// 		// also notify if the COM port they gave isn't found, maybe their config is wrong
+		// 	} else if errors.Is(err, os.ErrNotExist) {
+		// 		d.logger.Warnw("Provided COM port seems wrong, notifying user and closing",
+		// 			"comPort", d.config.ConnectionInfo.COMPort)
+
+		// 		d.notifier.Notify(fmt.Sprintf("Can't connect to %s!", d.config.ConnectionInfo.COMPort),
+		// 			"This serial port doesn't exist, check your configuration and make sure it's set correctly.")
+
+		// 		d.signalStop()
+		// 	}
+		// }
 	}()
 
 	// wait until stopped (gracefully)

@@ -269,7 +269,7 @@ func (cc *CanonicalConfig) populateFromVipers() error {
 
 	// merge mute mappings from user config
 	cc.MuteMapping = muteMapFromConfigs(
-		cc.userConfig.GetStringMapStringSlice(configKeyMuteMapping),
+		cc.userConfig.GetStringMapStringSlice(configKeySliderMapping), //configKeyMuteMapping),
 	)
 
 	// get the rest of the config fields - viper saves us a lot of effort here

@@ -11,6 +11,12 @@ Project is still work in progress so more info will be available when its fully 
 - Instant mute of selected groups and microphone using buttons on Mikser-Deck
 - GUI that makes configuring easy
 
+## Known issues
+- When closing always asks if settings were saved, even if you did save them
+- After oppening GUI actual selected port is not shown until you push detect button
+- Closes if wrong port is selected in config file 
+- Need to change but| into mute| in both support app and device
+
 ## License
 
 Mixer-deej is released under the [MIT license](./LICENSE).
