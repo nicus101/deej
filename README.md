@@ -13,6 +13,7 @@ Project is still work in progress so more info will be available when its fully 
 
 ## Known issues
 - You tell me :)
+- Needs a small how to use and config tutorial
 - Code is a bit mess (refactor planned in not so near future)
 
 ## License
