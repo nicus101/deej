@@ -12,10 +12,8 @@ Project is still work in progress so more info will be available when its fully 
 - GUI that makes configuring easy
 
 ## Known issues
-- When closing always asks if settings were saved, even if you did save them
-- After oppening GUI actual selected port is not shown until you push detect button
-- Closes if wrong port is selected in config file 
-- Need to change but| into mute| in both support app and device
+- You tell me :)
+- Code is a bit mess (refactor planned in not so near future)
 
 ## License
 

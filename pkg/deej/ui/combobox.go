@@ -92,9 +92,17 @@ func (cb *appComboBox) populateAppList(appNames []string) {
 func (cb *appComboBox) populateAppConfigStatus(appNames []string) {
 	for _, appName := range appNames {
 		appStatus := cb.appMap[appName]
-		// TODO: to think about
 		appStatus.isConfigured = true
 		cb.appMap[appName] = appStatus
+	}
+	cb.updateAppList()
+}
+
+func (cb *appComboBox) populateAppConfigStatusAfterSave(appNames []string) {
+	for _, appName := range appNames {
+		cb.appMap[appName] = appComboStatus{
+			isConfigured: true,
+		}
 	}
 	cb.updateAppList()
 }

@@ -32,6 +32,9 @@ func (ConnectAD *Connection) ConnectAndDispatch(
 	volumeConsumer VolumeConsumer,
 ) error {
 	log.Println("Connecting to:", portName)
+	defer func() {
+		lastPortName = ""
+	}()
 
 	port, err := serial.Open(portName, &serial.Mode{
 		BaudRate: 9600,
@@ -44,7 +47,6 @@ func (ConnectAD *Connection) ConnectAndDispatch(
 	if ConnectAD.portNameChannel == nil {
 		ConnectAD.portNameChannel = make(chan string, 1)
 	}
-	lastPortName = portName
 
 	timerTimeout := time.Second * 5
 	timerHit := false
@@ -77,6 +79,7 @@ func (ConnectAD *Connection) ConnectAndDispatch(
 			return err
 		}
 		timer.Reset(timerTimeout)
+		lastPortName = portName
 
 		line = strings.TrimSuffix(line, "\r\n")
 		fmt.Printf("Read %q\n", line)

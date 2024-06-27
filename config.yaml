@@ -1,5 +1,5 @@
 baud_rate: 9600
-com_port: COM5
+com_port: COM16
 invert_sliders: false
 mute_mapping:
   "0": deej.mic
@@ -11,6 +11,7 @@ slider_mapping:
   - explorer.exe
   "1":
   - steam.exe
+  - system
   "2":
   - explorer.exe
   "3":

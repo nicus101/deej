@@ -172,13 +172,14 @@ func ShowUI(
 		configChanged = false
 		for i, comboBox := range comboBoxes {
 			configuredApps := channelAppsSetter.ChannelAppGet(i)
-			comboBox.populateAppConfigStatus(configuredApps)
+			comboBox.populateAppConfigStatusAfterSave(configuredApps)
 		}
 	})
 	configWindow.Add(saveBtn)
 
 	addLabel(configWindow, 15, 10, 83, 27, "Chose port:")
 	isConnectedLabel := addLabel(configWindow, 207, 10, 90, 10, "Click detect port")
+	detectPorts(comPortBox, isConnectedLabel, configWindow, &detectedDeviceName)
 
 	applyBtn := wui.NewButton()
 	applyBtn.SetBounds(114, 310, 85, 25)
@@ -222,31 +223,7 @@ func ShowUI(
 	})
 
 	detectButton.SetOnClick(func() {
-		detectedDevices, err := device.ListNames()
-		if err != nil {
-			log.Println("Can't get devices list", err)
-			return
-		}
-		if len(detectedDevices) == 0 {
-			log.Println("No devices detected.")
-			return
-		}
-		if len(detectedDevices) != 1 {
-			responseString := fmt.Sprint("More than one device detected try manually selecting one of those ports:", detectedDevices)
-			err := beeep.Notify("Warning!", responseString, "")
-			if err != nil {
-				log.Println("Error", err)
-			}
-			//return
-		}
-		detectedDevices = slices.Compact(detectedDevices)
-		comPortBox.SetItems(detectedDevices)
-		comPortBox.SetSelectedIndex(0)
-		isConnectedLabel.SetText("Detected port:")
-		addLabel(configWindow, 207, 30, 90, 10, detectedDevices[0])
-		detectedDeviceName = detectedDevices[0]
-		configWindow.Repaint()
-
+		detectPorts(comPortBox, isConnectedLabel, configWindow, &detectedDeviceName)
 	})
 
 	configWindow.SetPosition(
@@ -255,6 +232,35 @@ func ShowUI(
 	)
 	configWindow.Show()
 
+	configWindow.Repaint()
+}
+
+func detectPorts(comPortBox *wui.ComboBox, isConnectedLabel *wui.Label, configWindow *wui.Window, detectedDeviceName *string) {
+	isConnectedLabel.SetText("Detecting...")
+
+	detectedDevices, err := device.ListNames()
+	if err != nil {
+		log.Println("Can't get devices list", err)
+		return
+	}
+	if len(detectedDevices) == 0 {
+		log.Println("No devices detected.")
+		return
+	}
+	if len(detectedDevices) != 1 {
+		responseString := fmt.Sprint("More than one device detected try manually selecting one of those ports:", detectedDevices)
+		err := beeep.Notify("Warning!", responseString, "")
+		if err != nil {
+			log.Println("Error", err)
+		}
+		//return
+	}
+	detectedDevices = slices.Compact(detectedDevices)
+	comPortBox.SetItems(detectedDevices)
+	comPortBox.SetSelectedIndex(0)
+	isConnectedLabel.SetText("Detected port:")
+	addLabel(configWindow, 207, 30, 90, 10, detectedDevices[0])
+	*detectedDeviceName = detectedDevices[0]
 	configWindow.Repaint()
 }
 
@@ -268,6 +274,68 @@ func addLabel(
 	label.SetText(labelText)
 	wnd.Add(label)
 	return label
+}
+
+func ConfigInfo() {
+	configInfoWindowFont, _ := wui.NewFont(wui.FontDesc{
+		Name:   "Tahoma",
+		Height: -14,
+		Bold:   true,
+	})
+
+	resolution := screenresolution.GetPrimary()
+
+	configInfoWindow := wui.NewWindow()
+	configInfoWindow.SetFont(configInfoWindowFont)
+	configInfoWindow.SetInnerSize(400, 130)
+	configInfoWindow.SetTitle("Mixer device not detected!")
+	configInfoWindow.SetHasMinButton(false)
+	configInfoWindow.SetHasMaxButton(false)
+	configInfoWindow.SetResizable(false)
+	configInfoWindow.SetPosition(
+		resolution.Width/2-configInfoWindow.Width()/2,
+		resolution.Height/2-configInfoWindow.Height()/2,
+	)
+
+	confiInfoLabel1 := wui.NewLabel()
+	confiInfoLabel1.SetAnchors(wui.AnchorCenter, wui.AnchorCenter)
+	confiInfoLabel1.SetBounds(10, 10, 380, 20)
+	confiInfoLabel1.SetText("Can't detect mixer device,")
+	confiInfoLabel1.SetAlignment(wui.AlignCenter)
+	configInfoWindow.Add(confiInfoLabel1)
+
+	confiInfoLabel2 := wui.NewLabel()
+	confiInfoLabel2.SetAnchors(wui.AnchorCenter, wui.AnchorCenter)
+	confiInfoLabel2.SetBounds(10, 30, 380, 20)
+	confiInfoLabel2.SetText("make sure it is connected to PC,")
+	confiInfoLabel2.SetAlignment(wui.AlignCenter)
+	configInfoWindow.Add(confiInfoLabel2)
+
+	confiInfoLabel3 := wui.NewLabel()
+	confiInfoLabel3.SetAnchors(wui.AnchorCenter, wui.AnchorCenter)
+	confiInfoLabel3.SetBounds(10, 51, 380, 20)
+	confiInfoLabel3.SetText("or find Mixer-deej icon on tray and open configuration editor")
+	confiInfoLabel3.SetAlignment(wui.AlignCenter)
+	configInfoWindow.Add(confiInfoLabel3)
+
+	confiInfoLabel4 := wui.NewLabel()
+	confiInfoLabel4.SetAnchors(wui.AnchorCenter, wui.AnchorCenter)
+	confiInfoLabel4.SetBounds(10, 70, 380, 20)
+	confiInfoLabel4.SetText("Then push detect device button.")
+	confiInfoLabel4.SetAlignment(wui.AlignCenter)
+	configInfoWindow.Add(confiInfoLabel4)
+
+	okBtn := wui.NewButton()
+	okBtn.SetVerticalAnchor(wui.AnchorCenter)
+	okBtn.SetBounds(160, 95, 80, 30)
+	okBtn.SetText("OK")
+	okBtn.SetOnClick(func() {
+		configInfoWindow.Close()
+	})
+	configInfoWindow.Add(okBtn)
+
+	configInfoWindow.ShowModal()
+	configInfoWindow.Repaint()
 }
 
 func askClose(configChanged bool, comboBoxes []*appComboBox) bool {

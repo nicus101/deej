@@ -8,10 +8,11 @@ import (
 
 func parseAndDispatch(line string, volumeConsumer VolumeConsumer) {
 	isMute := false
-	if strings.HasPrefix(line, "but|") {
+	if strings.HasPrefix(line, "but|") || strings.HasPrefix(line, "mute|") {
 		isMute = true
 	}
 	line = strings.TrimPrefix(line, "but|")
+	line = strings.TrimPrefix(line, "mute|")
 
 	values := strings.Split(line, "|")
 

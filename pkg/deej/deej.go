@@ -8,9 +8,11 @@ import (
 	"log"
 	"os"
 	"sort"
+	"time"
 
 	"go.uber.org/zap"
 
+	"github.com/omriharel/deej/pkg/deej/ui"
 	"github.com/omriharel/deej/pkg/deej/util"
 	"github.com/omriharel/deej/pkg/device"
 )
@@ -185,9 +187,27 @@ func (d *Deej) run() {
 	// connect to the arduino for the first time
 	go func() {
 		comPort := d.config.ConnectionInfo.COMPort
-		err := d.connection.ConnectAndDispatch(context.TODO(), comPort, d.sessions) // TODO: make
-		if err != nil {
-			log.Fatal("connection failed:", err)
+		//var lock sync.Mutex
+		infoWindowShown := false
+		for {
+			err := d.connection.ConnectAndDispatch(context.TODO(), comPort, d.sessions) // TODO: make
+			if err != nil {
+				log.Print("connection failed:", err)
+			}
+			if !infoWindowShown {
+				ui.ConfigInfo()
+				infoWindowShown = true
+			}
+			time.Sleep(3 * time.Second)
+			// tutaj nic nie słucha na port change
+			// go func() {
+			// 	if !lock.TryLock() {
+			// 		return
+			// 	}
+			// 	defer lock.Unlock()
+
+			// 	ui.ShowUI(nil, d, d, d.config, d.config)
+			// }()
 		}
 		// if err := d.serial.Start(); err != nil {
 		// 	d.logger.Warnw("Failed to start first-time serial connection", "error", err)
