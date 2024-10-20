@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type sessionMap struct {
+type SessionMap struct {
 	deej   *Deej
 	logger *zap.SugaredLogger
 
@@ -57,10 +57,10 @@ const (
 // this matches friendly device names (on Windows), e.g. "Headphones (Realtek Audio)"
 var deviceSessionKeyPattern = regexp.MustCompile(`^.+ \(.+\)$`)
 
-func newSessionMap(deej *Deej, logger *zap.SugaredLogger, sessionFinder SessionFinder) (*sessionMap, error) {
+func newSessionMap(deej *Deej, logger *zap.SugaredLogger, sessionFinder SessionFinder) (*SessionMap, error) {
 	logger = logger.Named("sessions")
 
-	m := &sessionMap{
+	m := &SessionMap{
 		deej:          deej,
 		logger:        logger,
 		m:             make(map[string][]Session),
@@ -73,7 +73,7 @@ func newSessionMap(deej *Deej, logger *zap.SugaredLogger, sessionFinder SessionF
 	return m, nil
 }
 
-func (m *sessionMap) initialize() error {
+func (m *SessionMap) initialize() error {
 	if err := m.getAndAddSessions(); err != nil {
 		m.logger.Warnw("Failed to get all sessions during session map initialization", "error", err)
 		return fmt.Errorf("get all sessions during init: %w", err)
@@ -86,7 +86,7 @@ func (m *sessionMap) initialize() error {
 	return nil
 }
 
-func (m *sessionMap) release() error {
+func (m *SessionMap) release() error {
 	if err := m.sessionFinder.Release(); err != nil {
 		m.logger.Warnw("Failed to release session finder during session map release", "error", err)
 		return fmt.Errorf("release session finder during release: %w", err)
@@ -95,9 +95,13 @@ func (m *sessionMap) release() error {
 	return nil
 }
 
+func (m *SessionMap) GetAllSessions() ([]Session, error) {
+	return m.sessionFinder.GetAllSessions()
+}
+
 // assumes the session map is clean!
 // only call on a new session map or as part of refreshSessions which calls reset
-func (m *sessionMap) getAndAddSessions() error {
+func (m *SessionMap) getAndAddSessions() error {
 
 	// mark that we're refreshing before anything else
 	m.lastSessionRefresh = time.Now()
@@ -123,7 +127,7 @@ func (m *sessionMap) getAndAddSessions() error {
 	return nil
 }
 
-func (m *sessionMap) setupOnConfigReload() {
+func (m *SessionMap) setupOnConfigReload() {
 	configReloadedChannel := m.deej.config.SubscribeToChanges()
 
 	go func() {
@@ -134,7 +138,7 @@ func (m *sessionMap) setupOnConfigReload() {
 	}()
 }
 
-func (m *sessionMap) setupOnSliderMove() {
+func (m *SessionMap) setupOnSliderMove() {
 	sliderEventsChannel := m.deej.serial.SubscribeToSliderMoveEvents()
 
 	go func() {
@@ -144,12 +148,12 @@ func (m *sessionMap) setupOnSliderMove() {
 	}()
 }
 
-func (m *sessionMap) setupOnMute() {
+func (m *SessionMap) setupOnMute() {
 	m.deej.serial.muteConsumer = m
 }
 
 // performance: explain why force == true at every such use to avoid unintended forced refresh spams
-func (m *sessionMap) refreshSessions(force bool) {
+func (m *SessionMap) refreshSessions(force bool) {
 
 	// make sure enough time passed since the last refresh, unless force is true in which case always clear
 	if !force && m.lastSessionRefresh.Add(minTimeBetweenSessionRefreshes).After(time.Now()) {
@@ -169,7 +173,7 @@ func (m *sessionMap) refreshSessions(force bool) {
 // returns true if a session is not currently mapped to any slider, false otherwise
 // special sessions (master, system, mic) and device-specific sessions always count as mapped,
 // even when absent from the config. this makes sense for every current feature that uses "unmapped sessions"
-func (m *sessionMap) sessionMapped(session Session) bool {
+func (m *SessionMap) sessionMapped(session Session) bool {
 
 	// count master/system/mic as mapped
 	if funk.ContainsString([]string{masterSessionName, systemSessionName, inputSessionName}, session.Key()) {
@@ -205,7 +209,7 @@ func (m *sessionMap) sessionMapped(session Session) bool {
 	return matchFound
 }
 
-func (m *sessionMap) Mute(mutes []bool) {
+func (m *SessionMap) Mute(mutes []bool) {
 	// for each mute input
 	for i, mute := range mutes {
 
@@ -222,7 +226,11 @@ func (m *sessionMap) Mute(mutes []bool) {
 	}
 }
 
-func (m *sessionMap) handleMuteEvent(mute bool, target string) {
+func (m *SessionMap) OnMute(mutes []bool) {
+	m.Mute(mutes)
+}
+
+func (m *SessionMap) handleMuteEvent(mute bool, target string) {
 	// resolve the target name by cleaning it up and applying any special transformations.
 	// depending on the transformation applied, this can result in more than one target name
 	resolvedTargets := m.resolveTarget(target)
@@ -252,7 +260,17 @@ func (m *sessionMap) handleMuteEvent(mute bool, target string) {
 	}
 }
 
-func (m *sessionMap) handleSliderMoveEvent(event SliderMoveEvent) {
+func (m *SessionMap) OnVolume(volumes []int) {
+	for i, volume := range volumes {
+		percent := float32(volume) / 1024
+		m.handleSliderMoveEvent(SliderMoveEvent{
+			SliderID:     i,
+			PercentValue: percent,
+		})
+	}
+}
+
+func (m *SessionMap) handleSliderMoveEvent(event SliderMoveEvent) {
 
 	// first of all, ensure our session map isn't moldy
 	if m.lastSessionRefresh.Add(maxTimeBetweenSessionRefreshes).Before(time.Now()) {
@@ -317,11 +335,11 @@ func (m *sessionMap) handleSliderMoveEvent(event SliderMoveEvent) {
 	}
 }
 
-func (m *sessionMap) targetHasSpecialTransform(target string) bool {
+func (m *SessionMap) targetHasSpecialTransform(target string) bool {
 	return strings.HasPrefix(target, specialTargetTransformPrefix)
 }
 
-func (m *sessionMap) resolveTarget(target string) []string {
+func (m *SessionMap) resolveTarget(target string) []string {
 
 	// start by ignoring the case
 	target = strings.ToLower(target)
@@ -334,7 +352,7 @@ func (m *sessionMap) resolveTarget(target string) []string {
 	return []string{target}
 }
 
-func (m *sessionMap) applyTargetTransform(specialTargetName string) []string {
+func (m *SessionMap) applyTargetTransform(specialTargetName string) []string {
 
 	// select the transformation based on its name
 	switch specialTargetName {
@@ -372,7 +390,7 @@ func (m *sessionMap) applyTargetTransform(specialTargetName string) []string {
 	return nil
 }
 
-func (m *sessionMap) add(value Session) {
+func (m *SessionMap) add(value Session) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -386,7 +404,7 @@ func (m *sessionMap) add(value Session) {
 	}
 }
 
-func (m *sessionMap) get(key string) ([]Session, bool) {
+func (m *SessionMap) get(key string) ([]Session, bool) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -394,7 +412,7 @@ func (m *sessionMap) get(key string) ([]Session, bool) {
 	return value, ok
 }
 
-func (m *sessionMap) clear() {
+func (m *SessionMap) clear() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -411,7 +429,7 @@ func (m *sessionMap) clear() {
 	m.logger.Debug("Session map cleared")
 }
 
-func (m *sessionMap) String() string {
+func (m *SessionMap) String() string {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 

@@ -2,15 +2,16 @@ package deej
 
 import (
 	"fmt"
+	"log"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/omriharel/deej/pkg/deej/util"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
-
-	"github.com/omriharel/deej/pkg/deej/util"
 )
 
 // CanonicalConfig provides application-wide access to configuration fields,
@@ -36,6 +37,18 @@ type CanonicalConfig struct {
 
 	userConfig     *viper.Viper
 	internalConfig *viper.Viper
+}
+
+func (cc *CanonicalConfig) Write() error {
+	return cc.userConfig.WriteConfig()
+}
+
+func (cc *CanonicalConfig) Cancel() error {
+	err := cc.userConfig.ReadInConfig()
+	if err == nil {
+		cc.onConfigReloaded()
+	}
+	return err
 }
 
 const (
@@ -215,6 +228,37 @@ func (cc *CanonicalConfig) StopWatchingConfigFile() {
 	cc.stopWatcherChannel <- true
 }
 
+func (cc *CanonicalConfig) ChannelAppGet(chanId int) []string {
+	userConfig := viper.New()
+	userConfig.SetConfigName(userConfigName)
+	userConfig.SetConfigType(configType)
+	userConfig.AddConfigPath(userConfigPath)
+
+	userConfig.SetDefault(configKeySliderMapping, map[string][]string{})
+	userConfig.SetDefault(configKeyMuteMapping, map[string][]string{
+		"0": {"mic"},
+		"1": {"master"},
+	})
+	userConfig.SetDefault(configKeyInvertSliders, false)
+	userConfig.SetDefault(configKeyCOMPort, defaultCOMPort)
+	userConfig.SetDefault(configKeyBaudRate, defaultBaudRate)
+	userConfig.ReadInConfig()
+
+	chanStr := strconv.Itoa(chanId)
+	appMap := userConfig.GetStringMapStringSlice(configKeySliderMapping)
+	appList := appMap[chanStr]
+	return appList
+}
+
+func (cc *CanonicalConfig) ChannelAppsSet(chanId int, apps []string) {
+	chanStr := strconv.Itoa(chanId)
+	sliderMapping := cc.userConfig.GetStringMapStringSlice(configKeySliderMapping)
+	sliderMapping[chanStr] = apps
+	cc.userConfig.Set(configKeySliderMapping, sliderMapping)
+	log.Println(chanStr, sliderMapping)
+	cc.populateFromVipers()
+}
+
 func (cc *CanonicalConfig) populateFromVipers() error {
 
 	// merge the slider mappings from the user and internal configs
@@ -225,7 +269,7 @@ func (cc *CanonicalConfig) populateFromVipers() error {
 
 	// merge mute mappings from user config
 	cc.MuteMapping = muteMapFromConfigs(
-		cc.userConfig.GetStringMapStringSlice(configKeyMuteMapping),
+		cc.userConfig.GetStringMapStringSlice(configKeySliderMapping), //configKeyMuteMapping),
 	)
 
 	// get the rest of the config fields - viper saves us a lot of effort here

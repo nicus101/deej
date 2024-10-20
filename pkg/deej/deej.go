@@ -3,13 +3,18 @@
 package deej
 
 import (
-	"errors"
+	"context"
 	"fmt"
+	"log"
 	"os"
+	"sort"
+	"time"
 
 	"go.uber.org/zap"
 
+	"github.com/omriharel/deej/pkg/deej/ui"
 	"github.com/omriharel/deej/pkg/deej/util"
+	"github.com/omriharel/deej/pkg/device"
 )
 
 const (
@@ -24,11 +29,13 @@ type Deej struct {
 	notifier Notifier
 	config   *CanonicalConfig
 	serial   *SerialIO
-	sessions *sessionMap
+	sessions *SessionMap
 
 	stopChannel chan bool
 	version     string
 	verbose     bool
+
+	connection *device.Connection
 }
 
 // NewDeej creates a Deej instance
@@ -53,6 +60,7 @@ func NewDeej(logger *zap.SugaredLogger, verbose bool) (*Deej, error) {
 		config:      config,
 		stopChannel: make(chan bool),
 		verbose:     verbose,
+		connection:  &device.Connection{},
 	}
 
 	serial, err := NewSerialIO(d, logger)
@@ -115,6 +123,35 @@ func (d *Deej) Initialize() error {
 	return nil
 }
 
+// TODO: Nicek, opisz to po swojemu
+// Z punktu widzenia UI nie chcemy samych sesji, a listę nazw aplikacji/kanałów
+// raz że slica interfejsów nie przecastujemy, dwa że vipera i tak obchodzi tylko firefox.exe a nie sesja
+func (sf *Deej) ProgramList() ([]string, error) {
+	sf.sessions.refreshSessions(true)
+	programMap := map[string]struct{}{}
+
+	appendSessionKeys := func(sessions []Session) {
+		for _, session := range sessions {
+			programName := session.Key()
+			programMap[programName] = struct{}{}
+		}
+	}
+
+	appendSessionKeys(sf.sessions.unmappedSessions)
+
+	for _, sessions := range sf.sessions.m {
+		appendSessionKeys(sessions)
+	}
+
+	programList := make([]string, 0, len(programMap))
+	for programName := range programMap {
+		programList = append(programList, programName)
+	}
+
+	sort.Strings(programList)
+	return programList, nil
+}
+
 // SetVersion causes deej to add a version string to its tray menu if called before Initialize
 func (d *Deej) SetVersion(version string) {
 	d.version = version
@@ -135,6 +172,12 @@ func (d *Deej) setupInterruptHandler() {
 	}()
 }
 
+func (d *Deej) DevicePortSet(deviceName string) {
+	d.connection.DevicePortSet(deviceName)
+	fmt.Println("\033[31;1;4mUwU\033[0m")
+	d.config.userConfig.Set(configKeyCOMPort, deviceName)
+}
+
 func (d *Deej) run() {
 	d.logger.Info("Run loop starting")
 
@@ -143,30 +186,53 @@ func (d *Deej) run() {
 
 	// connect to the arduino for the first time
 	go func() {
-		if err := d.serial.Start(); err != nil {
-			d.logger.Warnw("Failed to start first-time serial connection", "error", err)
-
-			// If the port is busy, that's because something else is connected - notify and quit
-			if errors.Is(err, os.ErrPermission) {
-				d.logger.Warnw("Serial port seems busy, notifying user and closing",
-					"comPort", d.config.ConnectionInfo.COMPort)
-
-				d.notifier.Notify(fmt.Sprintf("Can't connect to %s!", d.config.ConnectionInfo.COMPort),
-					"This serial port is busy, make sure to close any serial monitor or other deej instance.")
-
-				d.signalStop()
-
-				// also notify if the COM port they gave isn't found, maybe their config is wrong
-			} else if errors.Is(err, os.ErrNotExist) {
-				d.logger.Warnw("Provided COM port seems wrong, notifying user and closing",
-					"comPort", d.config.ConnectionInfo.COMPort)
-
-				d.notifier.Notify(fmt.Sprintf("Can't connect to %s!", d.config.ConnectionInfo.COMPort),
-					"This serial port doesn't exist, check your configuration and make sure it's set correctly.")
-
-				d.signalStop()
+		comPort := d.config.ConnectionInfo.COMPort
+		//var lock sync.Mutex
+		infoWindowShown := false
+		for {
+			err := d.connection.ConnectAndDispatch(context.TODO(), comPort, d.sessions) // TODO: make
+			if err != nil {
+				log.Print("connection failed:", err)
 			}
+			if !infoWindowShown {
+				ui.ConfigInfo()
+				infoWindowShown = true
+			}
+			time.Sleep(3 * time.Second)
+			// tutaj nic nie słucha na port change
+			// go func() {
+			// 	if !lock.TryLock() {
+			// 		return
+			// 	}
+			// 	defer lock.Unlock()
+
+			// 	ui.ShowUI(nil, d, d, d.config, d.config)
+			// }()
 		}
+		// if err := d.serial.Start(); err != nil {
+		// 	d.logger.Warnw("Failed to start first-time serial connection", "error", err)
+
+		// 	// If the port is busy, that's because something else is connected - notify and quit
+		// 	if errors.Is(err, os.ErrPermission) {
+		// 		d.logger.Warnw("Serial port seems busy, notifying user and closing",
+		// 			"comPort", d.config.ConnectionInfo.COMPort)
+
+		// 		d.notifier.Notify(fmt.Sprintf("Can't connect to %s!", d.config.ConnectionInfo.COMPort),
+		// 			"This serial port is busy, make sure to close any serial monitor or other deej instance.")
+
+		// 		d.signalStop()
+
+		// 		// also notify if the COM port they gave isn't found, maybe their config is wrong
+		// 	} else if errors.Is(err, os.ErrNotExist) {
+		// 		d.logger.Warnw("Provided COM port seems wrong, notifying user and closing",
+		// 			"comPort", d.config.ConnectionInfo.COMPort)
+
+		// 		d.notifier.Notify(fmt.Sprintf("Can't connect to %s!", d.config.ConnectionInfo.COMPort),
+		// 			"This serial port doesn't exist, check your configuration and make sure it's set correctly.")
+
+		// 		d.signalStop()
+		// 	}
+		// }
 	}()
 
 	// wait until stopped (gracefully)
