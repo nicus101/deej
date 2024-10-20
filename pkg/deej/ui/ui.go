@@ -62,7 +62,7 @@ func ShowUI(
 	configWindow.SetFont(configWindowFont)
 	configWindow.SetInnerY(46)
 	configWindow.SetInnerSize(315, 340)
-	configWindow.SetTitle("Mixer Deck Configurator")
+	configWindow.SetTitle("MD Configurator")
 	configWindow.SetIcon(mainIcon)
 	configWindow.SetHasMaxButton(false)
 	configWindow.SetResizable(false)
